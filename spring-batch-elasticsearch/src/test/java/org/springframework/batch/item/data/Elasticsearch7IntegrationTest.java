@@ -17,17 +17,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.batch.item.data.TestDatabase.ELASTICSEARCH_7;
 
 @Testcontainers
 @SpringJUnitConfig
 @ImportAutoConfiguration({ ElasticsearchRestClientAutoConfiguration.class, ElasticsearchClientAutoConfiguration.class })
 class Elasticsearch7IntegrationTest {
 
-	private static final String IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch:7.17.27";
-
 	@Container
 	@ServiceConnection
-	static ElasticsearchContainer container = new ElasticsearchContainer(IMAGE_NAME);
+	static ElasticsearchContainer container = new ElasticsearchContainer(ELASTICSEARCH_7.getImageName());
 
 	@Test
 	void testSetup(@Autowired RestClient restClient) throws IOException {

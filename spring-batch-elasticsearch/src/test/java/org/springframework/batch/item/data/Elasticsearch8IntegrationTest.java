@@ -24,17 +24,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.batch.item.data.TestDatabase.ELASTICSEARCH_8;
 
 @Testcontainers
 @SpringJUnitConfig
 @ImportAutoConfiguration({ ElasticsearchRestClientAutoConfiguration.class, ElasticsearchClientAutoConfiguration.class })
 @TestPropertySource(properties = { "spring.elasticsearch.username=elastic", "spring.elasticsearch.password=changeme" })
-class ElasticsearchIntegrationTest {
-
-	private static final String IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch:8.17.2";
+class Elasticsearch8IntegrationTest {
 
 	@Container
-	static ElasticsearchContainer container = new ElasticsearchContainer(IMAGE_NAME);
+	static ElasticsearchContainer container = new ElasticsearchContainer(ELASTICSEARCH_8.getImageName());
 
 	@DynamicPropertySource
 	static void properties(DynamicPropertyRegistry registry) {
