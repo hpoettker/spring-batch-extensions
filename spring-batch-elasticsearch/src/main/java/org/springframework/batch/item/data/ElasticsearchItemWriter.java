@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2014 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,47 +31,54 @@ import static org.springframework.util.CollectionUtils.isEmpty;
 import java.util.List;
 
 import org.slf4j.Logger;
+import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.DocumentOperations;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
-import org.springframework.transaction.support.TransactionSynchronizationAdapter;
+import org.springframework.transaction.support.TransactionSynchronization;
 
 /**
  * <p>
- * A {@link ItemWriter} implementation that writes to Elasticsearch store using an implementation of Spring Data's
- * {@link ElasticsearchOperations}.  Similar to MongoDB, Elasticsearch is not a transactional store,
- * the strategy for writing data is similar to {@link MongoItemWriter}. There is no roll back if an error occurs
+ * A {@link ItemWriter} implementation that writes to Elasticsearch store using an
+ * implementation of Spring Data's {@link DocumentOperations}. Similar to MongoDB,
+ * Elasticsearch is not a transactional store, the strategy for writing data is similar to
+ * {@link MongoItemWriter}. There is no roll back if an error occurs
  * </p>
  *
  * <p>
- * This writer is thread-safe once all properties are set (normal singleton behavior) so it can be used in multiple
- * concurrent transactions.
+ * This writer is thread-safe once all properties are set (normal singleton behavior) so
+ * it can be used in multiple concurrent transactions.
  * </p>
  *
  * @author Hasnain Javed
- * @since  3.x.x
+ * @since 3.x.x
  *
  */
 public class ElasticsearchItemWriter implements ItemWriter<IndexQuery>, InitializingBean {
 
 	private final String dataKey;
+
 	private final Logger logger;
-	private ElasticsearchOperations elasticsearchOperations;	
+
+	private final DocumentOperations documentOperations;
+
+	private final IndexCoordinates indexCoordinates;
+
 	private boolean delete;
 
-	public ElasticsearchItemWriter(ElasticsearchOperations elasticsearchOperations) {
-		super();
+	public ElasticsearchItemWriter(DocumentOperations documentOperations, IndexCoordinates indexCoordinates) {
 		dataKey = valueOf(randomUUID());
 		logger = getLogger(getClass());
 		delete = false;
-		this.elasticsearchOperations = elasticsearchOperations;
+		this.documentOperations = documentOperations;
+		this.indexCoordinates = indexCoordinates;
 	}
 
 	/**
-	 * A flag for removing items given to the writer. Default value is set to false indicating that the items will be saved.
-	 * otherwise, the items will be removed.
-	 *
+	 * A flag for removing items given to the writer. Default value is set to false
+	 * indicating that the items will be saved. otherwise, the items will be removed.
 	 * @param delete flag
 	 */
 	public void setDelete(boolean delete) {
@@ -80,41 +87,34 @@ public class ElasticsearchItemWriter implements ItemWriter<IndexQuery>, Initiali
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
+		state(documentOperations != null, "A DocumentOperations implementation is required.");
 	}
 
 	@Override
-	public void write(List<? extends IndexQuery> items) throws Exception {
-
-		if(isActualTransactionActive()) {
-			addToBuffer(items);
-		}else {
-			writeItems(items);
+	public void write(Chunk<? extends IndexQuery> chunk) throws Exception {
+		if (isActualTransactionActive()) {
+			addToBuffer(chunk.getItems());
+		}
+		else {
+			writeItems(chunk.getItems());
 		}
 	}
 
 	/**
-	 * Writes to Elasticsearch via the template.
-	 * This can be overridden by a subclass if required.
-	 *
+	 * Writes to Elasticsearch via the template. This can be overridden by a subclass if
+	 * required.
 	 * @param items the list of items to be indexed.
 	 */
 	protected void writeItems(List<? extends IndexQuery> items) {
-
-		if(isEmpty(items)) {
-			logger.warn("no items to write to elasticsearch. list is empty or null");
-		}else {
-
-			for(IndexQuery item : items) {
-
-				if(delete) {
-					String id = item.getId();
-					logger.debug("deleting item with id {}", id);
-					elasticsearchOperations.delete(item.getObject().getClass(), id);
-				}else {					
-					String id = elasticsearchOperations.index(item);
-					logger.debug("added item to elasticsearch with id {}", id);
-				}
+		for (IndexQuery item : items) {
+			if (delete) {
+				String id = item.getId();
+				logger.debug("deleting item with id {}", id);
+				documentOperations.delete(id, item.getObject().getClass());
+			}
+			else {
+				String id = documentOperations.index(item, indexCoordinates);
+				logger.debug("added item to elasticsearch with id {}", id);
 			}
 		}
 	}
@@ -122,40 +122,46 @@ public class ElasticsearchItemWriter implements ItemWriter<IndexQuery>, Initiali
 	@SuppressWarnings("unchecked")
 	private void addToBuffer(List<? extends IndexQuery> items) {
 
-		if(hasResource(dataKey)) {
+		if (hasResource(dataKey)) {
 			logger.debug("appending items to buffer under key {}", dataKey);
 			List<IndexQuery> buffer = (List<IndexQuery>) getResource(dataKey);
 			buffer.addAll(items);
-		}else {
+		}
+		else {
 			logger.debug("adding items to buffer under key {}", dataKey);
 			bindResource(dataKey, items);
 			registerSynchronization(new TransactionSynchronizationCallbackImpl());
 		}
 	}
 
-	private class TransactionSynchronizationCallbackImpl extends TransactionSynchronizationAdapter {
+	private class TransactionSynchronizationCallbackImpl implements TransactionSynchronization {
+
 		@SuppressWarnings("unchecked")
 		@Override
 		public void beforeCommit(boolean readOnly) {
 
 			List<IndexQuery> items = (List<IndexQuery>) getResource(dataKey);
-			if(!isEmpty(items)) {
-				if(!readOnly) {
+			if (!isEmpty(items)) {
+				if (!readOnly) {
 					writeItems(items);
-				}else{
+				}
+				else {
 					logger.warn("can not write items to elasticsearch as transaction is read only");
 				}
-			}else {
+			}
+			else {
 				logger.warn("no items to write to elasticsearch. list is empty or null");
 			}
 		}
 
 		@Override
 		public void afterCompletion(int status) {
-			if(hasResource(dataKey)) {
+			if (hasResource(dataKey)) {
 				logger.debug("removing items from buffer under key {}", dataKey);
 				unbindResource(dataKey);
 			}
 		}
+
 	}
+
 }

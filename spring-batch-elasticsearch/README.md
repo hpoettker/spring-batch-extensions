@@ -1,9 +1,9 @@
 # spring-batch-elasticsearch
---------------
+
 ItemReader and ItemWriter implementations for Elasticsearch
 
 ## To index documents
---------------
+
 Create a class and define the index name and type
 ```
 @Document(indexName="some_index", type="some_type")
@@ -32,7 +32,7 @@ public class SampleItemProcess implements ItemProcessor<Object, IndexQuery> {
 ```
 
 ## Configuration for reader/writer
---------------
+
 ```
 @Configuration
 public class ReaderWriterConfig {

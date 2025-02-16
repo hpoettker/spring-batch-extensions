@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2014 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,53 +27,54 @@ import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.query.SearchQuery;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchOperations;
+import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
  * <p>
- * Restartable {@link ItemReader} that reads documents from Elasticsearch
- * via a paging technique.
+ * Restartable {@link ItemReader} that reads documents from Elasticsearch via a paging
+ * technique.
  * </p>
  *
  * <p>
- * It executes the query object {@link SearchQuery} to retrieve the requested
- * documents. The query is executed using paged requests specified in the
+ * It executes the query object {@link SearchQuery} to retrieve the requested documents.
+ * The query is executed using paged requests specified in the
  * {@link org.springframework.data.elasticsearch.core.query.AbstractQuery#setPageable(Pageable pageable)}.
- * Additional pages are requested as needed to provide data when the {@link #read()} method is called.
+ * Additional pages are requested as needed to provide data when the {@link #read()}
+ * method is called.
  * </p>
  *
  * <p>
- * The implementation is thread-safe between calls to
- * {@link #open(ExecutionContext)}, but remember to use <code>saveState=false</code>
- * if used in a multi-threaded client (no restart available).
+ * The implementation is thread-safe between calls to {@link #open(ExecutionContext)}, but
+ * remember to use <code>saveState=false</code> if used in a multi-threaded client (no
+ * restart available).
  * </p>
- *
  *
  * @author Hasnain Javed
- * @since  3.x.x
+ * @since 3.x.x
  */
 public class ElasticsearchItemReader<T> extends AbstractPaginatedDataItemReader<T> implements InitializingBean {
 
 	private final Logger logger;
 
-	private final ElasticsearchOperations elasticsearchOperations;
+	private final SearchOperations searchOperations;
 
-	private final SearchQuery query;
+	private final Query query;
 
 	private final Class<? extends T> targetType;
 
-	public ElasticsearchItemReader(ElasticsearchOperations elasticsearchOperations, SearchQuery query, Class<? extends T> targetType) {
+	public ElasticsearchItemReader(SearchOperations searchOperations, Query query, Class<? extends T> targetType) {
 		setName(getShortName(getClass()));
 		logger = getLogger(getClass());
-		this.elasticsearchOperations = elasticsearchOperations;
+		this.searchOperations = searchOperations;
 		this.query = query;
 		this.targetType = targetType;
 	}
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		state(elasticsearchOperations != null, "An ElasticsearchOperations implementation is required.");
+		state(searchOperations != null, "A SearchOperations implementation is required.");
 		state(query != null, "A query is required.");
 		state(targetType != null, "A target type to convert the input into is required.");
 	}
@@ -82,8 +83,9 @@ public class ElasticsearchItemReader<T> extends AbstractPaginatedDataItemReader<
 	@SuppressWarnings("unchecked")
 	protected Iterator<T> doPageRead() {
 
-		logger.debug("executing query {}", query.getQuery());
+		logger.debug("executing query {}", query.toString());
 
-		return (Iterator<T>)elasticsearchOperations.queryForList(query, targetType).iterator();
+		return (Iterator<T>) searchOperations.search(query, targetType).map(SearchHit::getContent).iterator();
 	}
+
 }
